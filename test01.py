@@ -25,8 +25,9 @@ def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
     bracket = [e.strip() for e in bracket.strip().split("\n") if e != ""]
     return (quoted, bracket)
 
-def run(compiler_cmd):
+def run(compiler_cmd, surpress_system_header_warnings=True):
     (base_quoted_paths, base_bracket_paths) = scan_compiler_paths(compiler_cmd)
+    base_search_paths = base_quoted_paths + base_bracket_paths
 
     scan_compiler_paths(compiler_cmd)
 
@@ -42,7 +43,7 @@ def run(compiler_cmd):
     #-isystem dir
     #-idirafter dir
 
-    def ignored_warning(msg):
+    def print_warning(msg):
         print("[WARNING] " + msg)
 
     def handle_db(db):
@@ -85,7 +86,7 @@ def run(compiler_cmd):
                 parse_i_opt("-idirafter")
 
                 if not handled:
-                    ignored_warning(f + ": Ignored include option " + opt)
+                    print_warning(f + ": Ignored include option " + opt)
 
             #print(includes)
             #pprint((includes, cmd))
@@ -97,8 +98,13 @@ def run(compiler_cmd):
     #pprint(db)
 
 
-    def walk_include_tree(sourcepath, search_paths, parent_tree, cache):
+    def walk_include_tree(this, search_paths, parent_tree, cache):
+        (sourcepath, is_system_file) = this
         (quote_paths, bracket_paths) = search_paths
+
+        def local_print_warning(msg):
+            if not is_system_file:
+                print_warning(sourcepath + ": " + msg)
 
         includes = []
 
@@ -110,11 +116,11 @@ def run(compiler_cmd):
                 elif groups.group(5):
                     includes.append(("bracket", groups.group(5), groups.group(0)))
                 else:
-                    ignored_warning(sourcepath + ": Could not parse include " + groups.group(0))
+                    local_print_warning("Could not parse '" + groups.group(0) + "'")
 
         #pprint(includes)
 
-        def search(path, search_paths, base_search_paths):
+        def search(path, search_paths):
             child = None
             for search_path in search_paths:
                 #print("  Search in", search_path)
@@ -126,30 +132,42 @@ def run(compiler_cmd):
                     break
             return child
 
-        def search_quoted(path, span):
-            ignored_warning("Ignored quoted")
+        def search_quoted(path):
+            child = None
+            path_relative_to_sourcepath = Path(sourcepath).parent / Path(path)
+            #print("Try {} relative to {}: {}".format(path, sourcepath, path_relative_to_sourcepath))
+            if path_relative_to_sourcepath.is_file():
+                child = (str(path_relative_to_sourcepath), is_system_file)
+
+            if not child:
+                child = search(path, quote_paths)
+
+            if not child:
+                child = search(path, bracket_paths)
+
+            return child
 
         for (kind, path, span) in includes:
+            #print("from {} resolve {} of kind {}".format(sourcepath, path, kind))
             child = None
 
             if kind == "bracket":
-                child = search(path, bracket_paths, base_bracket_paths)
+                child = search(path, bracket_paths)
             elif kind == "quoted":
-                print("from {} resolve {} of kind {}".format(sourcepath, path, kind))
-                search_quoted(path, span)
+                child = search_quoted(path)
             else:
-                ignored_warning("BUG! This should not be reached")
+                print_warning("BUG! This should not be reached")
 
             if not child:
-                ignored_warning(sourcepath + ": Could not resolve " + span)
+                local_print_warning("Could not resolve " + span)
             elif child in parent_tree:
-                ignored_warning(sourcepath + ": Skipping duplicate " + span)
+                local_print_warning("Skipping duplicate " + span)
             elif child in cache:
                 parent_tree[child] = cache[child]
             else:
                 cache[child] = {}
                 parent_tree[child] = cache[child]
-                walk_include_tree(child[0], search_paths, parent_tree[child], cache)
+                walk_include_tree(child, search_paths, parent_tree[child], cache)
 
 
     def print_dep_tree(tree, indent = "", cache = set(), hide_system_header = True):
@@ -167,9 +185,8 @@ def run(compiler_cmd):
         res = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
         f = (db_entry["file"], False)
         tree = { f : {} }
-        walk_include_tree(f[0], res, tree[f], {})
+        walk_include_tree(f, res, tree[f], {})
         print_dep_tree(tree)
-        exit(1)
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
 gcc_cmd = "gcc -x c++ -v -E /dev/null"
