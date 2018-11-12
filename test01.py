@@ -8,7 +8,7 @@ import os
 
 group = "#include \"\\.\\.\\.\" search starts here:((.*\n)*)#include <\\.\\.\\.> search starts here:((.*\n)*)End of search list."
 g = re.compile(group)
-include_pattern = re.compile("#\s*include\s*((\"(.*)\")|(<(.*)>)|([^\"<].*))\s*(((//)|(/\*)).*)?$", re.MULTILINE)
+include_pattern = re.compile("^\s*#\s*include\s*((\"(.*)\")|(<(.*)>)|([^\"<].*))\s*(((//)|(/\*)).*)?$", re.MULTILINE)
 
 def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
     cmd2 = cmd + " " + " ".join([opt + " " + optarg for (opt, optarg) in extra_argpairs])
@@ -25,18 +25,16 @@ def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
     bracket = [e.strip() for e in bracket.strip().split("\n") if e != ""]
     return (quoted, bracket)
 
-def run(compiler_cmd, surpress_system_header_warnings=True):
+def run(config, compiler_cmd, surpress_system_header_warnings=True):
     (base_quoted_paths, base_bracket_paths) = scan_compiler_paths(compiler_cmd)
     base_search_paths = base_quoted_paths + base_bracket_paths
-
-    scan_compiler_paths(compiler_cmd)
 
     def load_build_db(path):
         with open(path, "r") as x:
             j = json.loads(x.read())
             return j
 
-    db = load_build_db("/home/marvin/dev/arbeit/pwm/build/compile_commands.json")
+    db = load_build_db(config["db_file"])
 
     #-I dir
     #-iquote dir
@@ -181,13 +179,24 @@ def run(compiler_cmd, surpress_system_header_warnings=True):
                 cache.add(e)
                 print_dep_tree(tree[e], indent + "  ", cache)
 
+    cache = {}
     for db_entry in db:
         res = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
         f = (db_entry["file"], False)
         tree = { f : {} }
-        walk_include_tree(f, res, tree[f], {})
-        print_dep_tree(tree)
+        walk_include_tree(f, res, tree[f], cache)
+        #print_dep_tree(tree)
+        pprint(db_entry["includes"])
+
+    #print("############################")
+    #for (header, is_system) in sorted(cache):
+    #    if not is_system:
+    #        print(header)
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
 gcc_cmd = "gcc -x c++ -v -E /dev/null"
-run(gcc_cmd)
+config = {
+    "db_file"   : "/home/marvin/dev/arbeit/pwm/build/compile_commands.json",
+    "cmake_root": "/home/marvin/dev/arbeit/pwm",
+}
+run(config, gcc_cmd)
