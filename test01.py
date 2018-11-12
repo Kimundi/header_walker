@@ -95,12 +95,17 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
 
     #pprint(db)
 
+    def is_descendant(childpath, parentpath):
+        return (Path(parentpath) in Path(childpath).parents)
 
     def is_filtered_out(path, is_system_file):
         if config["filter_out_system_search_paths"] and is_system_file:
             return True
-        if config["filter_out_paths_outside_project_root"] and (Path(config["cmake_root"]) not in Path(path).parents):
+        if config["filter_out_paths_outside_project_root"] and not is_descendant(path, config["cmake_root"]):
             return True
+        for excluded in config["excluded_directories"]:
+            if is_descendant(path, excluded):
+                return True
         return False
 
     def walk_include_tree(sourcepath, search_paths, source_property, cache):
@@ -176,25 +181,34 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
                 walk_include_tree(child[0], search_paths, parent_tree[child[0]], cache)
 
 
-    def print_dep_tree(tree, indent = "", cache = set()):
+    def print_dep_tree(tree, indent = "", print_cache = set()):
         hide_system_header = config["filter_out_system_search_paths"]
         for e in tree:
-            if hide_system_header and tree[e]["is_in_system_search_path"]:
+            #print(indent + "e:", e)
+            if is_filtered_out(e, tree[e]["is_in_system_search_path"]):
                 continue
-            print("{}{}".format(indent, e))
-            if e in cache:
-                print(indent + "  ...")
+            pe = e
+            if is_descendant(pe, config["cmake_root"]):
+                pe = str(Path(pe).relative_to(Path(config["cmake_root"])))
+                print("{}{}".format(indent, pe))
+            if e in print_cache:
+                print(indent + "  <...>")
             else:
-                cache.add(e)
-                print_dep_tree(tree[e]["children"], indent + "  ", cache)
+                print_cache.add(e)
+                print_dep_tree(tree[e]["children"], indent + "  ", print_cache)
 
-    cache = {}
-    for db_entry in db:
+    if config["print_header_dependencies"]:
+        print("Include Tree")
+    walk_cache = {}
+    # FIXME: The same file can appear multiple times in the db (for some reason)
+    for db_entry in sorted(db, key = lambda x : x["file"]):
         res = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
         f = db_entry["file"]
         tree = { db_entry["file"] : { "is_in_system_search_path": False, "children": {} } }
-        walk_include_tree(f, res, tree[f], cache)
+        walk_include_tree(f, res, tree[f], walk_cache)
         if config["print_header_dependencies"]:
+            print()
+            print(db_entry["command"])
             print_dep_tree(tree)
 
     if config["print_all_unique_header"]:
@@ -210,7 +224,12 @@ config = {
     "cmake_root": "/home/marvin/dev/arbeit/pwm",
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
-    "print_all_unique_header": True,
+    "print_all_unique_header": False,
     "print_header_dependencies": True,
+    "excluded_directories": [
+        "/home/marvin/dev/arbeit/pwm/external",
+        "/home/marvin/dev/arbeit/pwm/build",
+        "/home/marvin/dev/arbeit/pwm/test",
+    ]
 }
 run(config, gcc_cmd)
