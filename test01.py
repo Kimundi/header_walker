@@ -96,13 +96,20 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
     #pprint(db)
 
 
+    def is_filtered_out(path, is_system_file):
+        if config["filter_out_system_search_paths"] and is_system_file:
+            return True
+        if config["filter_out_paths_outside_project_root"] and (Path(config["cmake_root"]) not in Path(path).parents):
+            return True
+        return False
+
     def walk_include_tree(sourcepath, search_paths, source_property, cache):
         parent_tree = source_property["children"]
         is_system_file = source_property["is_in_system_search_path"]
         (quote_paths, bracket_paths) = search_paths
 
         def local_print_warning(msg):
-            if not is_system_file:
+            if not is_filtered_out(sourcepath, is_system_file):
                 print_warning(sourcepath + ": " + msg)
 
         includes = []
@@ -169,7 +176,8 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
                 walk_include_tree(child[0], search_paths, parent_tree[child[0]], cache)
 
 
-    def print_dep_tree(tree, indent = "", cache = set(), hide_system_header = True):
+    def print_dep_tree(tree, indent = "", cache = set()):
+        hide_system_header = config["filter_out_system_search_paths"]
         for e in tree:
             if hide_system_header and tree[e]["is_in_system_search_path"]:
                 continue
@@ -186,18 +194,23 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
         f = db_entry["file"]
         tree = { db_entry["file"] : { "is_in_system_search_path": False, "children": {} } }
         walk_include_tree(f, res, tree[f], cache)
-        print_dep_tree(tree)
-        pprint(db_entry["includes"])
+        if config["print_header_dependencies"]:
+            print_dep_tree(tree)
 
-    print("############################")
-    for header in sorted(cache):
-        if not cache[header]["is_in_system_search_path"]:
-            print(header)
+    if config["print_all_unique_header"]:
+        print("Unique Header")
+        for header in sorted(cache):
+            if not is_filtered_out(header, cache[header]["is_in_system_search_path"]):
+                print(header)
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
 gcc_cmd = "gcc -x c++ -v -E /dev/null"
 config = {
     "db_file"   : "/home/marvin/dev/arbeit/pwm/build/compile_commands.json",
     "cmake_root": "/home/marvin/dev/arbeit/pwm",
+    "filter_out_system_search_paths": True,
+    "filter_out_paths_outside_project_root": True,
+    "print_all_unique_header": True,
+    "print_header_dependencies": True,
 }
 run(config, gcc_cmd)
