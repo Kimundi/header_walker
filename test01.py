@@ -96,8 +96,9 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
     #pprint(db)
 
 
-    def walk_include_tree(this, search_paths, parent_tree, cache):
-        (sourcepath, is_system_file) = this
+    def walk_include_tree(sourcepath, search_paths, source_property, cache):
+        parent_tree = source_property["children"]
+        is_system_file = source_property["is_in_system_search_path"]
         (quote_paths, bracket_paths) = search_paths
 
         def local_print_warning(msg):
@@ -158,40 +159,40 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
 
             if not child:
                 local_print_warning("Could not resolve " + span)
-            elif child in parent_tree:
+            elif child[0] in parent_tree:
                 local_print_warning("Skipping duplicate " + span)
-            elif child in cache:
-                parent_tree[child] = cache[child]
+            elif child[0] in cache:
+                parent_tree[child[0]] = cache[child[0]]
             else:
-                cache[child] = {}
-                parent_tree[child] = cache[child]
-                walk_include_tree(child, search_paths, parent_tree[child], cache)
+                cache[child[0]] = { "is_in_system_search_path": child[1], "children": {} }
+                parent_tree[child[0]] = cache[child[0]]
+                walk_include_tree(child[0], search_paths, parent_tree[child[0]], cache)
 
 
     def print_dep_tree(tree, indent = "", cache = set(), hide_system_header = True):
         for e in tree:
-            if hide_system_header and e[1]:
+            if hide_system_header and tree[e]["is_in_system_search_path"]:
                 continue
-            print("{}{}".format(indent, e[0]))
+            print("{}{}".format(indent, e))
             if e in cache:
                 print(indent + "  ...")
             else:
                 cache.add(e)
-                print_dep_tree(tree[e], indent + "  ", cache)
+                print_dep_tree(tree[e]["children"], indent + "  ", cache)
 
     cache = {}
     for db_entry in db:
         res = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
-        f = (db_entry["file"], False)
-        tree = { f : {} }
+        f = db_entry["file"]
+        tree = { db_entry["file"] : { "is_in_system_search_path": False, "children": {} } }
         walk_include_tree(f, res, tree[f], cache)
-        #print_dep_tree(tree)
+        print_dep_tree(tree)
         pprint(db_entry["includes"])
 
-    #print("############################")
-    #for (header, is_system) in sorted(cache):
-    #    if not is_system:
-    #        print(header)
+    print("############################")
+    for header in sorted(cache):
+        if not cache[header]["is_in_system_search_path"]:
+            print(header)
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
 gcc_cmd = "gcc -x c++ -v -E /dev/null"
