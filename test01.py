@@ -108,15 +108,15 @@ def search(path, search_paths, base_search_paths):
             break
     return child
 
-def walk_include_tree(sourcepath, source_property, config, search_paths, base_search_paths, cache):
+def walk_include_tree(sourcepath, source_properties, config, search_paths, base_search_paths, cache):
     if sourcepath in cache:
         return
-    cache[sourcepath] = source_property
+    cache[sourcepath] = source_properties
 
     (quote_paths, bracket_paths) = search_paths
 
-    children = source_property["children"]
-    is_system_file = source_property["is_in_system_search_path"]
+    children = source_properties["children"]
+    is_system_file = source_properties["is_in_system_search_path"]
 
     def filtered_print_warning(msg):
         if not is_filtered_out(config, sourcepath, is_system_file):
@@ -165,9 +165,15 @@ def walk_include_tree(sourcepath, source_property, config, search_paths, base_se
         else:
             childname = child[0]
             child_is_system_header = child[1]
-            properties = { "is_in_system_search_path": child_is_system_header, "children": {}, "is_root_file": False }
-            children[childname] = properties
-            walk_include_tree(childname, properties, config, search_paths, base_search_paths, cache)
+            child_properties = {
+                "is_in_system_search_path": child_is_system_header,
+                "children": {},
+                "is_root_file": False,
+                "working_directory": source_properties["working_directory"],
+                "include_flags": source_properties["include_flags"],
+            }
+            children[childname] = child_properties
+            walk_include_tree(childname, child_properties, config, search_paths, base_search_paths, cache)
 
 def print_dep_tree(tree, config):
     def print_dep_tree_(tree, config, indent, print_cache):
@@ -202,7 +208,13 @@ def run(config, compiler_cmd):
     for db_entry in sorted(db, key = lambda x : x["file"]):
         search_paths = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
         filename = db_entry["file"]
-        properties = { "is_in_system_search_path": False, "children": {}, "is_root_file": True }
+        properties = {
+            "is_in_system_search_path": False,
+            "children": {},
+            "is_root_file": True,
+            "working_directory": db_entry["directory"],
+            "include_flags": db_entry["includes"],
+        }
         walk_include_tree(filename, properties, config, search_paths, base_search_paths, walk_cache)
 
     if config["print_header_dependencies"]:
