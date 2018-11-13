@@ -182,7 +182,6 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
 
 
     def print_dep_tree(tree, indent = "", print_cache = set()):
-        hide_system_header = config["filter_out_system_search_paths"]
         for e in tree:
             #print(indent + "e:", e)
             if is_filtered_out(e, tree[e]["is_in_system_search_path"]):
@@ -190,7 +189,7 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
             pe = e
             if is_descendant(pe, config["cmake_root"]):
                 pe = str(Path(pe).relative_to(Path(config["cmake_root"])))
-                print("{}{}".format(indent, pe))
+            print("{}{}".format(indent, pe))
             if e in print_cache:
                 print(indent + "  <...>")
             else:
@@ -207,14 +206,14 @@ def run(config, compiler_cmd, surpress_system_header_warnings=True):
         tree = { db_entry["file"] : { "is_in_system_search_path": False, "children": {} } }
         walk_include_tree(f, res, tree[f], walk_cache)
         if config["print_header_dependencies"]:
-            print()
-            print(db_entry["command"])
+            #print()
+            #print(db_entry["command"])
             print_dep_tree(tree)
 
     if config["print_all_unique_header"]:
         print("Unique Header")
-        for header in sorted(cache):
-            if not is_filtered_out(header, cache[header]["is_in_system_search_path"]):
+        for header in sorted(walk_cache):
+            if not is_filtered_out(header, walk_cache[header]["is_in_system_search_path"]):
                 print(header)
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
