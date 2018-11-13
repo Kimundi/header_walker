@@ -95,6 +95,7 @@ def is_filtered_out(config, path, is_system_file):
             return True
     return False
 
+# Returns (path, is_system_header) or None
 def search(path, search_paths, base_search_paths):
     child = None
     for search_path in search_paths:
@@ -107,14 +108,15 @@ def search(path, search_paths, base_search_paths):
             break
     return child
 
-usp = set()
+def walk_include_tree(sourcepath, source_property, config, search_paths, base_search_paths, cache):
+    if sourcepath in cache:
+        return
+    cache[sourcepath] = source_property
 
-def walk_include_tree(sourcepath, source_property, cache, config, search_paths, base_search_paths):
-    children = source_property["children"]
-    is_system_file = source_property["is_in_system_search_path"]
     (quote_paths, bracket_paths) = search_paths
 
-    usp.add(search_paths)
+    children = source_property["children"]
+    is_system_file = source_property["is_in_system_search_path"]
 
     def filtered_print_warning(msg):
         if not is_filtered_out(config, sourcepath, is_system_file):
@@ -134,6 +136,7 @@ def walk_include_tree(sourcepath, source_property, cache, config, search_paths, 
 
     #pprint(includes)
 
+    # Returns (path, is_system_header) or None
     def search_quoted(path):
         child = None
         path_relative_to_sourcepath = Path(sourcepath).parent / Path(path)
@@ -159,29 +162,30 @@ def walk_include_tree(sourcepath, source_property, cache, config, search_paths, 
 
         if not child:
             filtered_print_warning("Could not resolve " + span)
-        elif child[0] in children:
-            filtered_print_warning("Skipping duplicate " + span)
-        elif child[0] in cache:
-            children[child[0]] = cache[child[0]]
         else:
-            cache[child[0]] = { "is_in_system_search_path": child[1], "children": {} }
-            children[child[0]] = cache[child[0]]
-            walk_include_tree(child[0], children[child[0]], cache, config, search_paths, base_search_paths)
+            childname = child[0]
+            child_is_system_header = child[1]
+            properties = { "is_in_system_search_path": child_is_system_header, "children": {}, "is_root_file": False }
+            children[childname] = properties
+            walk_include_tree(childname, properties, config, search_paths, base_search_paths, cache)
 
-def print_dep_tree(tree, config, indent = "", print_cache = set()):
-    for e in tree:
-        #print(indent + "e:", e)
-        if is_filtered_out(config, e, tree[e]["is_in_system_search_path"]):
-            continue
-        pe = e
-        if is_descendant(pe, config["cmake_root"]):
-            pe = str(Path(pe).relative_to(Path(config["cmake_root"])))
-        print("{}{}".format(indent, pe))
-        if e in print_cache:
-            print(indent + "  <...>")
-        else:
-            print_cache.add(e)
-            print_dep_tree(tree[e]["children"], config, indent + "  ", print_cache)
+def print_dep_tree(tree, config):
+    def print_dep_tree_(tree, config, indent, print_cache):
+        for e in sorted(tree):
+            if is_filtered_out(config, e, tree[e]["is_in_system_search_path"]):
+                continue
+            #print(indent + "e:", e)
+            pe = e
+            if is_descendant(pe, config["cmake_root"]):
+                pe = str(Path(pe).relative_to(Path(config["cmake_root"])))
+
+            if e in print_cache:
+                print("{}[{}]...".format(indent, pe))
+            else:
+                print("{}{}".format(indent, pe))
+                print_cache.add(e)
+                print_dep_tree_(tree[e]["children"], config, indent + "  ", print_cache)
+    print_dep_tree_(tree, config, "", set())
 
 def run(config, compiler_cmd):
     # Get the default search paths for include pragmas
@@ -193,28 +197,27 @@ def run(config, compiler_cmd):
     process_db(db)
 
     # Iterate over all source files from the db, and gather their include trees
-    trees = []
     walk_cache = {}
     # FIXME: The same file can appear multiple times in the db (for some reason)
     for db_entry in sorted(db, key = lambda x : x["file"]):
         search_paths = scan_compiler_paths(compiler_cmd, db_entry["directory"], db_entry["includes"])
         filename = db_entry["file"]
-        properties = { "is_in_system_search_path": False, "children": {} }
-        walk_include_tree(filename, properties, walk_cache, config, search_paths, base_search_paths)
-        trees.append({ filename : properties })
+        properties = { "is_in_system_search_path": False, "children": {}, "is_root_file": True }
+        walk_include_tree(filename, properties, config, search_paths, base_search_paths, walk_cache)
 
     if config["print_header_dependencies"]:
-        print("Include Tree")
-        for tree in trees:
-            #print()
-            #print(db_entry["command"])
-            print_dep_tree(tree, config)
+        print("[Include trees]")
+        for e in sorted(walk_cache):
+            if walk_cache[e]["is_root_file"]:
+                print_dep_tree({e: walk_cache[e]}, config)
+        print()
 
     if config["print_all_unique_header"]:
-        print("Unique Header")
+        print("[Unique header files]")
         for header in sorted(walk_cache):
             if not is_filtered_out(config, header, walk_cache[header]["is_in_system_search_path"]):
                 print(header)
+        print()
 
 clang_cmd = "clang -x c++ -v -E /dev/null"
 gcc_cmd = "gcc -x c++ -v -E /dev/null"
@@ -232,4 +235,3 @@ config = {
     ]
 }
 run(config, gcc_cmd)
-#pprint(usp)
