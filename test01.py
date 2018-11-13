@@ -26,8 +26,8 @@ def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
     #print(groups)
 
     (quoted, bracket) = groups.group(1, 3)
-    quoted = [e.strip() for e in quoted.strip().split("\n") if e != ""]
-    bracket = [e.strip() for e in bracket.strip().split("\n") if e != ""]
+    quoted = tuple([e.strip() for e in quoted.strip().split("\n") if e != ""])
+    bracket = tuple([e.strip() for e in bracket.strip().split("\n") if e != ""])
     return (quoted, bracket)
 
 def print_warning(msg):
@@ -107,10 +107,14 @@ def search(path, search_paths, base_search_paths):
             break
     return child
 
+usp = set()
+
 def walk_include_tree(sourcepath, source_property, cache, config, search_paths, base_search_paths):
     children = source_property["children"]
     is_system_file = source_property["is_in_system_search_path"]
     (quote_paths, bracket_paths) = search_paths
+
+    usp.add(search_paths)
 
     def filtered_print_warning(msg):
         if not is_filtered_out(config, sourcepath, is_system_file):
@@ -228,3 +232,4 @@ config = {
     ]
 }
 run(config, gcc_cmd)
+#pprint(usp)
