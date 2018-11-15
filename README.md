@@ -19,10 +19,10 @@ All settings of the tool can be controlled with a json config file. Example:
 {
     "db_file"   : "<project_root>/build/compile_commands.json",
     "project_root": "<project_root>",
-    "filter_out_system_search_paths": True,
-    "filter_out_paths_outside_project_root": True,
-    "print_all_unique_header": True,
-    "print_header_dependencies": True,
+    "filter_out_system_search_paths": true,
+    "filter_out_paths_outside_project_root": true,
+    "print_all_unique_header": true,
+    "print_header_dependencies": true,
     "excluded_directories": [
         "<project_root>/external",
         "<project_root>/build",
