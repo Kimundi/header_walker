@@ -17,7 +17,7 @@ All settings of the tool can be controlled with a json config file. Example:
 
 ```json
 {
-    "db_file"   : "<project_root>/build/compile_commands.json"
+    "db_file"   : "<project_root>/build/compile_commands.json",
     "project_root": "<project_root>",
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
