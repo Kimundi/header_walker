@@ -8,7 +8,7 @@ It assumes `gcc` as a C++ compiler, and that it is used with C++, not C code.
 ## Inferring from a cmake project layout:
 
 1. Ensure you have a cmake project at location `<project_root>`, with its build directory in `<project_root>/build`
-2. Generate a `compile_commands.json` file for the project by setting the `CMAKE_EXPORT_COMPILE_COMMANDS`  cmake flag. Might require reconfiguration or rebuilding the project.
+2. Generate a `<project_root>/build/compile_commands.json` file for the project by setting the `CMAKE_EXPORT_COMPILE_COMMANDS`  cmake flag. Might require reconfiguration or rebuilding the project.
 3. Invoke `header_walker.py --from_cmake_build_dir <project_root>/build`
 
 ## Using a config file:
