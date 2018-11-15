@@ -90,7 +90,7 @@ def is_descendant(childpath, parentpath):
 def is_filtered_out(config, path, is_system_file):
     if config["filter_out_system_search_paths"] and is_system_file:
         return True
-    if config["filter_out_paths_outside_project_root"] and not is_descendant(path, config["cmake_root"]):
+    if config["filter_out_paths_outside_project_root"] and not is_descendant(path, config["project_root"]):
         return True
     for excluded in config["excluded_directories"]:
         if is_descendant(path, excluded):
@@ -184,8 +184,8 @@ def print_dep_tree(tree, config):
                 continue
             #print(indent + "e:", e)
             pe = e
-            if is_descendant(pe, config["cmake_root"]):
-                pe = str(Path(pe).relative_to(Path(config["cmake_root"])))
+            if is_descendant(pe, config["project_root"]):
+                pe = str(Path(pe).relative_to(Path(config["project_root"])))
 
             if e in print_cache:
                 print("{}[{}]...".format(indent, pe))
@@ -196,6 +196,7 @@ def print_dep_tree(tree, config):
     print_dep_tree_(tree, config, "", set())
 
 def run(config, compiler_cmd):
+    print("[Analyzing source files]...")
     # Get the default search paths for include pragmas
     (base_quoted_paths, base_bracket_paths) = scan_compiler_paths(compiler_cmd)
     base_search_paths = base_quoted_paths + base_bracket_paths
@@ -219,15 +220,17 @@ def run(config, compiler_cmd):
         }
         walk_include_tree(filename, properties, config, search_paths, base_search_paths, walk_cache)
 
+    print()
+
     if config["print_header_dependencies"]:
-        print("[Include trees]")
+        print("[Include trees]:")
         for e in sorted(walk_cache):
             if walk_cache[e]["is_root_file"]:
                 print_dep_tree({e: walk_cache[e]}, config)
         print()
 
     if config["print_all_unique_header"]:
-        print("[Unique header files]")
+        print("[Unique header files]:")
         for header in sorted(walk_cache):
             if not is_filtered_out(config, header, walk_cache[header]["is_in_system_search_path"]):
                 print(header)
@@ -235,7 +238,7 @@ def run(config, compiler_cmd):
 
 example_config = {
     "db_file"   : "/home/marvin/dev/arbeit/pwm/build/compile_commands.json",
-    "cmake_root": "/home/marvin/dev/arbeit/pwm",
+    "project_root": "/home/marvin/dev/arbeit/pwm",
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": True,
@@ -249,7 +252,7 @@ example_config = {
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str, help="Load settings from a json file. The file does not have to be complete. and its keys get overridden by other cli arguments. See script source for the `example_config` value.")
-parser.add_argument("--from_build_dir", type=str, help="Tries to infer relevant settings from the location of the build directory. Assumes the build directory is placed below the project root.")
+parser.add_argument("--from_cmake_build_dir", type=str, help="Tries to infer relevant settings from the location of the build directory. Assumes the build directory is placed below the project root.")
 # TODO:
 # - Expose some of the settings as commandline flags?
 # - Some way to automatically determine source7build/root directory?
@@ -259,7 +262,7 @@ args = parser.parse_args()
 
 config = {
     "db_file"   : None,
-    "cmake_root": None,
+    "project_root": None,
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": False,
@@ -272,13 +275,13 @@ if args.config:
     for key in file_config:
         config[key] = file_config[key]
 
-if args.from_build_dir:
-    bp = Path(args.from_build_dir).resolve()
+if args.from_cmake_build_dir:
+    bp = Path(args.from_cmake_build_dir).resolve()
     config["db_file"] = str(bp / Path("compile_commands.json"))
-    config["cmake_root"] = str(bp.parent)
+    config["project_root"] = str(bp.parent)
     config["excluded_directories"].append(str(bp))
 
-if config["db_file"] and config["cmake_root"]:
+if config["db_file"] and config["project_root"]:
     print("[Config]:")
     for key in config:
         print("{}: {}".format(key, config[key]))
@@ -289,4 +292,4 @@ if config["db_file"] and config["cmake_root"]:
     gcc_cmd = "gcc -x c++ -v -E /dev/null"
     run(config, gcc_cmd)
 else:
-    print("ERROR: Need to know the location of `db_file` and `cmake_root`.")
+    print("ERROR: Need to know the location of `db_file` and `project_root`.")
