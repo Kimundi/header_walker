@@ -17,8 +17,11 @@ def open_json(path):
         j = json.loads(x.read())
         return j
 
+def build_cmd_arg_string(argpairs):
+    return " ".join([opt + " " + optarg for (opt, optarg) in argpairs])
+
 def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
-    cmd2 = cmd + " " + " ".join([opt + " " + optarg for (opt, optarg) in extra_argpairs])
+    cmd2 = cmd + " " + build_cmd_arg_string(extra_argpairs)
 
     ret = subprocess.run(cmd2, shell=True, capture_output=True, cwd = wd)
     ret = ret.stderr.decode("utf-8")
@@ -236,6 +239,47 @@ def run(config, compiler_cmd):
                 print(header)
         print()
 
+    # TODO: finish implementation
+    #def reverse_walk(forward_walk_cache, reverse_walk_cache):
+        #pass
+    #if config["print_reverse_header_dependencies"]:
+        #print("[Reverse dependencies on header files (flat)]:")
+        #reverse_walk_cache = {}
+        #reverse_walk(walk_cache, reverse_walk_cache)
+
+        #for path in walk_cache:
+            #prop = walk_cache[path]
+            #for child_path in prop["children"]:
+                #child_prop = prop["children"][child_path]
+                #if child_path not in reverse_walk_cache:
+                    #reverse_walk_cache[child_path] = {
+                        #"is_in_system_search_path": child_prop["is_in_system_search_path"]
+                        #"parents": set(),
+                    #}
+                #if prop["is_root_file"]:
+                    #reverse_walk_cache[child_path].add((path, prop["is_in_system_search_path"]))
+        #for header in sorted(reverse_walk_cache):
+            #(rev_deps, is_in_system_search_path) = reverse_walk_cache[header]
+            #if len(rev_deps) != 0 and not is_filtered_out(config, header, is_in_system_search_path):
+                #print(header)
+                #for cpp in sorted(rev_deps):
+                    #print("  {}".format(cpp))
+    if config["print_iwyu_recommendations"]:
+        print("[iwyu recommendations]:")
+        for header in sorted(walk_cache):
+            if is_filtered_out(config, header, walk_cache[header]["is_in_system_search_path"]):
+                continue
+
+            prop = walk_cache[header]
+            include_flags = prop["include_flags"]
+            cmd_args = build_cmd_arg_string(include_flags)
+            cmd = "{} {} {} {}".format(config["iwyu_binary"], config["iwyu_flags"], header, cmd_args)
+            subprocess.run(cmd, shell=True)
+            #print(header)
+            #print("  {}".format(cmd))
+
+        print()
+
 example_config = {
     "db_file"   : "/home/marvin/dev/arbeit/pwm/build/compile_commands.json",
     "project_root": "/home/marvin/dev/arbeit/pwm",
@@ -243,6 +287,8 @@ example_config = {
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": True,
     "print_header_dependencies": True,
+    "print_reverse_header_dependencies": True,
+    "print_iwyu_recommendations": True,
     "excluded_directories": [
         "/home/marvin/dev/arbeit/pwm/external",
         "/home/marvin/dev/arbeit/pwm/build",
@@ -261,12 +307,16 @@ parser.add_argument("--from_cmake_build_dir", type=str, help="Tries to infer rel
 args = parser.parse_args()
 
 config = {
+    "iwyu_binary": "include-what-you-use",
+    "iwyu_flags": "-std=c++17",
     "db_file"   : None,
     "project_root": None,
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": False,
     "print_header_dependencies": True,
+    "print_reverse_header_dependencies": True,
+    "print_iwyu_recommendations": True,
     "excluded_directories": []
 }
 
