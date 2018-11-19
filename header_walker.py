@@ -25,8 +25,8 @@ def build_cmd_arg_string(argpairs):
     return " ".join([opt + " " + optarg for (opt, optarg) in argpairs])
 
 def run_cmd_and_return_as_string(cmd, wd=None):
-    ret = subprocess.run(cmd, shell=True, capture_output=True, cwd = wd)
-    ret = ret.stderr.decode("utf-8")
+    ret = subprocess.run(cmd + " 2>&1", shell=True, capture_output=True, cwd = wd)
+    ret = ret.stdout.decode("utf-8")
     return ret
 
 def scan_compiler_paths(cmd, wd = None, extra_argpairs = []):
@@ -296,6 +296,7 @@ def run(config, compiler_cmd):
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str, help="Load settings from a json file. The file does not have to be complete. and its keys get overridden by other cli arguments. See script source for the `example_config` value.")
 parser.add_argument("--from_cmake_build_dir", type=str, help="Tries to infer relevant settings from the location of the build directory. Assumes the build directory is placed below the project root.")
+parser.add_argument("--configure_cmake", action="store_true", help="If combined with --from_cmake_build_dir, try to enable all build settings needed by this tool.")
 parser.add_argument("--print_all_unique_header", action="store_true", help="Print a list of all transitively included headers.")
 parser.add_argument("--print_header_dependencies", action="store_true", help="Print the include tree of all source files. If a header is reached more than once, it is marked by [].")
 parser.add_argument("--print_iwyu_recommendations", action="store_true", help="Run iwyu on each header file and print the results.")
@@ -357,6 +358,13 @@ if args.from_cmake_build_dir:
     config["db_file"] = str(bp / Path("compile_commands.json"))
     config["project_root"] = str(bp.parent)
     config["excluded_directories"].append(str(bp))
+    if args.configure_cmake:
+        cmake_cmd = "cmake . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        print("[Configuring cmake]")
+        print("Running `{}` in build dir".format(cmake_cmd))
+        print("CMAKE output -------")
+        print(run_cmd_and_return_as_string(cmake_cmd, wd=bp))
+        print("--------------------")
 
 if config["db_file"] and config["project_root"]:
     print("[Config]:")
