@@ -314,7 +314,7 @@ example_config = {
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": True,
     "print_header_dependencies": True,
-    "print_reverse_header_dependencies": True,
+    #"print_reverse_header_dependencies": True,
     "print_iwyu_recommendations": True,
     "excluded_directories": [
         "/home/marvin/dev/arbeit/pwm/external",
@@ -333,7 +333,7 @@ config = {
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": False,
     "print_header_dependencies": False,
-    "print_reverse_header_dependencies": False,
+    #"print_reverse_header_dependencies": False,
     "print_iwyu_recommendations": False,
     "excluded_directories": []
 }
@@ -363,6 +363,14 @@ if config["db_file"] and config["project_root"]:
     for key in config:
         print("{}: {}".format(key, config[key]))
     print()
+
+    if not Path(config["project_root"]).is_dir():
+        print("ERROR: Could not open project_root directory at {}".format(config["project_root"]), file=sys.stderr)
+        exit(1)
+
+    if not Path(config["db_file"]).is_file():
+        print("ERROR: Could not open db_file at {}".format(config["db_file"]), file=sys.stderr)
+        exit(1)
 
     # We can discover the system search paths of either clang or gcc. Currently hardcodes gcc though
     clang_cmd = "clang -x c++ -v -E /dev/null"
