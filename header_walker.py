@@ -122,6 +122,8 @@ def search(path, search_paths, base_search_paths):
     return child
 
 def walk_include_tree(sourcepath, source_properties, config, search_paths, base_search_paths, cache):
+    if not Path(sourcepath).is_file():
+        return
     if sourcepath in cache:
         return
     cache[sourcepath] = source_properties
@@ -207,6 +209,23 @@ def print_dep_tree(tree, config):
     print_dep_tree_(tree, config, "", set())
 
 def run(config, compiler_cmd):
+    if config["regenerate_cmake_compile_commands_in_build_dir"]:
+        bp = Path(config["db_file"]).parent
+        cmake_cmd = "cmake . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        print("[Configuring cmake]:")
+        print("Running `{}` in {}".format(cmake_cmd, bp))
+        print("cmake output -------")
+        print(run_cmd_and_return_as_string(cmake_cmd, wd=bp))
+        print("--------------------")
+
+    if not Path(config["project_root"]).is_dir():
+        print("ERROR: Could not open project_root directory at {}".format(config["project_root"]), file=sys.stderr)
+        exit(1)
+
+    if not Path(config["db_file"]).is_file():
+        print("ERROR: Could not open db_file at {}".format(config["db_file"]), file=sys.stderr)
+        exit(1)
+
     print("[Analyzing source files]...")
     # Get the default search paths for include pragmas
     (base_quoted_paths, base_bracket_paths) = scan_compiler_paths(compiler_cmd)
@@ -330,6 +349,7 @@ config = {
     "iwyu_flags": "-std=c++17 -Xiwyu --mapping_file={}".format(get_script_path() / Path("iwyu.imp")),
     "db_file"   : None,
     "project_root": None,
+    "regenerate_cmake_compile_commands_in_build_dir": False,
     "filter_out_system_search_paths": True,
     "filter_out_paths_outside_project_root": True,
     "print_all_unique_header": False,
@@ -344,6 +364,15 @@ if args.config:
     for key in file_config:
         config[key] = file_config[key]
 
+if args.from_cmake_build_dir:
+    bp = Path(args.from_cmake_build_dir).resolve()
+    config["db_file"] = str(bp / Path("compile_commands.json"))
+    config["project_root"] = str(bp.parent)
+    config["excluded_directories"].append(str(bp))
+
+if args.configure_cmake:
+    config["regenerate_cmake_compile_commands_in_build_dir"] = True
+
 if args.print_all_unique_header:
     config["print_all_unique_header"] = True
 
@@ -353,32 +382,11 @@ if args.print_header_dependencies:
 if args.print_iwyu_recommendations:
     config["print_iwyu_recommendations"] = True
 
-if args.from_cmake_build_dir:
-    bp = Path(args.from_cmake_build_dir).resolve()
-    config["db_file"] = str(bp / Path("compile_commands.json"))
-    config["project_root"] = str(bp.parent)
-    config["excluded_directories"].append(str(bp))
-    if args.configure_cmake:
-        cmake_cmd = "cmake . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-        print("[Configuring cmake]")
-        print("Running `{}` in build dir".format(cmake_cmd))
-        print("CMAKE output -------")
-        print(run_cmd_and_return_as_string(cmake_cmd, wd=bp))
-        print("--------------------")
-
 if config["db_file"] and config["project_root"]:
     print("[Config]:")
     for key in config:
         print("{}: {}".format(key, config[key]))
     print()
-
-    if not Path(config["project_root"]).is_dir():
-        print("ERROR: Could not open project_root directory at {}".format(config["project_root"]), file=sys.stderr)
-        exit(1)
-
-    if not Path(config["db_file"]).is_file():
-        print("ERROR: Could not open db_file at {}".format(config["db_file"]), file=sys.stderr)
-        exit(1)
 
     # We can discover the system search paths of either clang or gcc. Currently hardcodes gcc though
     clang_cmd = "clang -x c++ -v -E /dev/null"
